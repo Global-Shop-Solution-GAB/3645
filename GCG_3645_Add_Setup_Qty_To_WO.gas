@@ -1,0 +1,269 @@
+Program.Sub.ScreenSU.Start
+Program.Sub.ScreenSU.End
+
+Program.Sub.Preflight.Start
+
+Program.Sub.Preflight.End
+
+Program.Sub.Main.Start
+F.Intrinsic.Control.SetErrorHandler("Main_Err")
+F.Intrinsic.Control.ClearErrors
+
+V.Local.sError.Declare(String)
+
+F.ODBC.Connection!con.OpenConnection(V.Ambient.PDSN,V.Ambient.PUser,V.Ambient.PPass)
+
+'Change User 1 field label to Setup Scrap Qty
+F.Intrinsic.Control.If(V.Caller.Hook,=,10120)
+	V.Passed.000003.Set("Setup Scrap Qty")
+'WO Header Populate Hook, check to see if new WO is being called from Auto Work Order Generation
+F.Intrinsic.Control.ElseIf(V.Caller.Hook,=,16630,"AND",V.Caller.Switches,=,"S")
+	F.Intrinsic.Control.If(V.Passed.000044,<>,".0000")
+		F.Intrinsic.Control.CallSub(Updatesingcustomerqty)
+	F.Intrinsic.Control.EndIf
+'If the WO,Part,Rev, or either QTY changes, re-calculate values. The Runtime QTY will now always be Setup Qty + Customer Qty
+F.Intrinsic.Control.ElseIf(V.Caller.Hook,=,16660,"OR",V.Caller.Hook,=,16661,V.Caller.Hook,=,16662,V.Caller.Hook,=,16676,V.Caller.Hook,=,16677)
+	F.Intrinsic.Control.If(V.Passed.000044,<>,.0000)
+		F.Intrinsic.Control.CallSub(Updaterunqty)
+	F.Intrinsic.Control.EndIf
+'Auto WO Gen Pre Gen Data
+F.Intrinsic.Control.ElseIf(V.Caller.Hook,=,28604)
+	F.Intrinsic.Control.CallSub(Updateautorunqty)
+'Auto WO Gen Pre Exit Hook
+F.Intrinsic.Control.ElseIf(V.Caller.Hook,=,28601)
+	F.Intrinsic.Control.CallSub(Updatemultcustomerqty)
+F.Intrinsic.Control.EndIf
+
+F.Intrinsic.Control.CallSub(Unload)
+
+F.Intrinsic.Control.ExitSub
+
+F.Intrinsic.Control.Label("Main_Err")
+F.Intrinsic.Control.If(V.Ambient.ErrorNumber,<>,0)
+	Function.Intrinsic.String.Concat("Project: GCG_3645_Add_Setup_Qty_To_WO.gas",V.Ambient.Newline,V.Ambient.Newline,"Subroutine: ",V.Ambient.CurrentSubroutine,V.Ambient.NewLine,"Error Occurred ",V.Ambient.ErrorNumber," with description ",V.Ambient.ErrorDescription,V.Local.sError)
+	F.Intrinsic.UI.Msgbox(V.Local.sError)
+Function.Intrinsic.Control.EndIf
+
+Program.Sub.Main.End
+
+Program.Sub.UpdateRunQty.Start
+F.Intrinsic.Control.SetErrorHandler("UpdateRunQty_Err")
+F.Intrinsic.Control.ClearErrors
+
+V.Local.sError.Declare(String)
+V.Local.sSQL.Declare(String)
+V.Local.sPart.Declare(String)
+V.Local.fQty.Declare(Float)
+'Get the part number from the screen.
+F.Intrinsic.String.GSSPartString(V.Passed.000012,V.Passed.000013,V.Local.sPart)
+'If no part is selected exit
+F.Intrinsic.Control.If(V.Local.sPart.Trim,<>,"")
+	F.Intrinsic.String.Build("SELECT TEXT_INFO1 FROM INVENTORY_MST2 WHERE PART = '{0}'",V.Local.sPart,V.Local.sSQL)
+	F.ODBC.Connection!con.OpenLocalRecordsetRO("rst",V.Local.sSQL)
+	
+	F.Intrinsic.Control.If(V.ODBC.con!rst.EOF,<>,True)
+		'Get Setup Qty, make sure that it is a number, if not then do nothing
+		V.Local.fQty.Set(V.ODBC.con!rst.FieldValTrim!TEXT_INFO1)
+		
+		F.Intrinsic.Control.If(V.Local.fQty.IsNumeric,=,True)
+			F.Intrinsic.Math.Add(V.Passed.000044,V.Local.fQty,V.Local.fQty)
+			V.Passed.000043.Set(V.Local.fQty)
+		F.Intrinsic.Control.EndIf
+	F.Intrinsic.Control.EndIf
+	
+	F.ODBC.con!rst.Close
+F.Intrinsic.Control.EndIf
+
+F.Intrinsic.Control.ExitSub
+
+F.Intrinsic.Control.Label("UpdateRunQty_Err")
+F.Intrinsic.Control.If(V.Ambient.ErrorNumber,<>,0)
+	Function.Intrinsic.String.Concat("Project: GCG_3645_Add_Setup_Qty_To_WO.gas",V.Ambient.Newline,V.Ambient.Newline,"Subroutine: ",V.Ambient.CurrentSubroutine,V.Ambient.NewLine,"Error Occurred ",V.Ambient.ErrorNumber," with description ",V.Ambient.ErrorDescription,V.Local.sError)
+	F.Intrinsic.UI.Msgbox(V.Local.sError)
+	F.Intrinsic.Control.CallSub(Unload)
+Function.Intrinsic.Control.EndIf
+
+Program.Sub.UpdateRunQty.End
+
+Program.Sub.Unload.Start
+F.Intrinsic.Control.SetErrorHandler("Unload_Err")
+F.Intrinsic.Control.ClearErrors
+
+V.Local.sError.Declare(String)
+
+F.ODBC.Connection!con.Close
+F.Intrinsic.Control.End
+
+F.Intrinsic.Control.ExitSub
+
+F.Intrinsic.Control.Label("Unload_Err")
+F.Intrinsic.Control.If(V.Ambient.ErrorNumber,<>,0)
+	Function.Intrinsic.String.Concat("Project: GCG_3645_Add_Setup_Qty_To_WO.gas",V.Ambient.Newline,V.Ambient.Newline,"Subroutine: ",V.Ambient.CurrentSubroutine,V.Ambient.NewLine,"Error Occurred ",V.Ambient.ErrorNumber," with description ",V.Ambient.ErrorDescription,V.Local.sError)
+	F.Intrinsic.UI.Msgbox(V.Local.sError)
+Function.Intrinsic.Control.EndIf
+
+Program.Sub.Unload.End
+
+Program.Sub.UpdateAutoRunQty.Start
+F.Intrinsic.Control.SetErrorHandler("UpdateAutoRunQty_Err")
+F.Intrinsic.Control.ClearErrors
+
+V.Local.sError.Declare(String)
+V.Local.iRow.Declare(Long)
+V.Local.iC.Declare(Long)
+V.Local.sReadRow.Declare(String)
+V.Local.sPart.Declare(String)
+V.Local.sRev.Declare(String)
+V.Local.sSQL.Declare(String)
+V.Local.fQty.Declare(Float)
+
+F.Intrinsic.BDF.Load("AUX001","AUX001")
+F.Intrinsic.BDF.Clone("AUX001","Clone")
+F.Intrinsic.BDF.ReadRowCount("AUX001",V.Local.iRow)
+F.Intrinsic.Math.Sub(V.Local.iRow,1,V.Local.iRow)
+
+F.Intrinsic.Control.For(V.Local.iC,0,V.Local.iRow,1)
+	'Read row and check for additional qty
+	F.Intrinsic.BDF.ReadRow("AUX001",V.Local.iC,V.Local.sReadRow)
+	F.Intrinsic.String.Split(V.Local.sReadRow,"|~|",V.Local.sReadRow)
+	V.Local.sPart.Set(V.Local.sReadRow(0))
+	F.Intrinsic.String.RPad(V.Local.sPart," ",17,V.Local.sPart)
+	V.Local.sRev.Set(V.Local.sReadRow(1))
+	F.Intrinsic.String.Build("SELECT TEXT_INFO1 FROM INVENTORY_MST2 WHERE PART = '{0}{1}'",V.Local.sPart,V.Local.sRev,V.Local.sSQL)
+	F.ODBC.Connection!con.OpenLocalRecordsetRO("rst",V.Local.sSQL)
+	
+	F.Intrinsic.Control.If(V.ODBC.con!rst.EOF,<>,True)
+		'Adding setup qty to the WO qty
+		V.Local.fQty.Set(V.ODBC.con!rst.FieldValTrim!TEXT_INFO1)
+		F.Intrinsic.Math.Add(V.Local.fQty,V.Local.sReadRow(4).Float,V.Local.sReadRow(4))
+		'Set flag to true  so that CORE knows to update
+		V.Passed.777777.Set(1)
+	F.Intrinsic.Control.EndIf
+	
+	F.ODBC.con!rst.Close
+	F.Intrinsic.String.Join(V.Local.sReadRow,"|~|",V.Local.sReadRow)
+	F.Intrinsic.BDF.WriteRow("Clone",V.Local.sReadRow)
+F.Intrinsic.Control.Next(V.Local.iC)
+
+F.Intrinsic.BDF.Save("Clone","AUX001")
+
+F.Intrinsic.Control.ExitSub
+
+F.Intrinsic.Control.Label("UpdateAutoRunQty_Err")
+F.Intrinsic.Control.If(V.Ambient.ErrorNumber,<>,0)
+	Function.Intrinsic.String.Concat("Project: GCG_3645_Add_Setup_Qty_To_WO.gas",V.Ambient.Newline,V.Ambient.Newline,"Subroutine: ",V.Ambient.CurrentSubroutine,V.Ambient.NewLine,"Error Occurred ",V.Ambient.ErrorNumber," with description ",V.Ambient.ErrorDescription,V.Local.sError)
+	F.Intrinsic.UI.Msgbox(V.Local.sError)
+	F.Intrinsic.Control.CallSub(Unload)
+Function.Intrinsic.Control.EndIf
+
+Program.Sub.UpdateAutoRunQty.End
+
+Program.Sub.UpdateMultCustomerQty.Start
+F.Intrinsic.Control.SetErrorHandler("UpdateMultCustomerQty_Err")
+F.Intrinsic.Control.ClearErrors
+
+V.Local.sError.Declare(String)
+V.Local.sFilePath.Declare(String)
+V.Local.sData.Declare(String)
+V.Local.sWO.Declare(String)
+V.Local.iC.Declare(Long)
+V.Local.sSQL.Declare(String)
+V.Local.fScrap.Declare(Float)
+V.Local.fCust.Declare(Float)
+V.Local.bScrap.Declare(String)
+
+V.Local.sFilePath.Set(V.Passed.009000)
+
+F.Intrinsic.File.File2String(V.Local.sFilePath,V.Local.sData)
+
+F.Intrinsic.Control.If(V.Local.sData.Trim,<>,"")
+	'Split up the text file to get all WO's generated
+	F.Intrinsic.String.Split(V.Local.sData,V.Ambient.NewLine,V.Local.sData)
+	F.Intrinsic.Control.For(V.Local.iC,0,V.Local.sData.UBound,1)
+		'Check to make sure the row read isn't blank
+		F.Intrinsic.Control.If(V.Local.sData(V.Local.iC).Trim,<>,"")
+			'Split up data
+			F.Intrinsic.String.Split(V.Local.sData(V.Local.iC),V.Ambient.Tab,V.Local.sWO)
+			
+			'Check to make sure this is the top level WO
+			F.Intrinsic.Control.If(V.Local.sWO(3).Trim,=,"000","OR",V.Local.sWO(3).Trim,=,"")
+				F.Intrinsic.String.Build("SELECT TEXT_INFO1 FROM INVENTORY_MST2  WHERE PART = '{0}' AND Location = '{1}'",V.Local.sWO(0),V.Local.sWO(1),V.Local.sSQL)
+				F.ODBC.Connection!con.OpenLocalRecordsetRO("rstQty",V.Local.sSQL)
+				
+				F.Intrinsic.Control.If(V.ODBC.con!rstQty.EOF,<>,True)
+					'Set Scrap amount
+					F.Intrinsic.Math.IsNumeric(V.ODBC.con!rstQty.FieldValTrim!TEXT_INFO1,V.Local.bScrap)
+					
+					F.Intrinsic.Control.If(V.Local.bScrap,<>,False)
+						V.Local.fScrap.Set(V.ODBC.con!rstQty.FieldValFloat!TEXT_INFO1)
+
+						'Query for the Customer qty
+						F.Intrinsic.String.Build("SELECT QTY_ORDER,QTY_CUSTOMER FROM JOB_HEADER WHERE JOB = '{0}' AND SUFFIX = '{1}'",V.Local.sWO(2),V.Local.sWO(3).Trim,V.Local.sSQL)
+						F.ODBC.Connection!con.OpenLocalRecordsetRW("rstWO",V.Local.sSQL)
+						
+						F.Intrinsic.Control.If(V.ODBC.con!rstWO.EOF,<>,True)
+							'Subtract scrap from the Customer Qty and update table
+							F.Intrinsic.Math.Sub(V.ODBC.con!rstWO.FieldValFloat!QTY_ORDER,V.Local.fScrap,V.Local.fCust)
+							'Make sure the Customer QTY hasn't already been updated
+							F.Intrinsic.Control.If(V.ODBC.con!rstWO.FieldValFloat!QTY_CUSTOMER,<>,V.Local.fCust)
+								F.ODBC.con!rstWO.Set!QTY_CUSTOMER(V.Local.fCust)
+								F.ODBC.con!rstWO.Update
+							F.Intrinsic.Control.EndIf
+						F.Intrinsic.Control.EndIf
+						
+						F.ODBC.con!rstWO.Close
+					F.Intrinsic.Control.EndIf
+				F.Intrinsic.Control.EndIf
+				F.ODBC.con!rstQty.Close
+			F.Intrinsic.Control.EndIf
+		F.Intrinsic.Control.EndIf
+	F.Intrinsic.Control.Next(V.Local.iC)
+F.Intrinsic.Control.EndIf
+
+F.Intrinsic.Control.ExitSub
+
+F.Intrinsic.Control.Label("UpdateMultCustomerQty_Err")
+F.Intrinsic.Control.If(V.Ambient.ErrorNumber,<>,0)
+	Function.Intrinsic.String.Concat("Project: GCG_3645_Add_Setup_Qty_To_WO.gas",V.Ambient.Newline,V.Ambient.Newline,"Subroutine: ",V.Ambient.CurrentSubroutine,V.Ambient.NewLine,"Error Occurred ",V.Ambient.ErrorNumber," with description ",V.Ambient.ErrorDescription,V.Local.sError)
+	F.Intrinsic.UI.Msgbox(V.Local.sError)
+	F.Intrinsic.Control.CallSub(Unload)
+Function.Intrinsic.Control.EndIf
+
+Program.Sub.UpdateMultCustomerQty.End
+
+Program.Sub.UpdateSingCustomerQty.Start
+F.Intrinsic.Control.SetErrorHandler("UpdateSingCustomerQty_Err")
+F.Intrinsic.Control.ClearErrors
+
+V.Local.sError.Declare(String)
+V.Local.sPart.Declare(String)
+V.Local.sLoc.Declare(String)
+V.Local.sSQL.Declare(String)
+
+'Set the part information
+F.Intrinsic.String.GSSPartString(V.Passed.000012,V.Passed.000013,V.Local.sPart)
+V.Local.sLoc.Set(V.Passed.000015)
+
+'Look for additional set up quantity
+F.Intrinsic.String.Build("SELECT TEXT_INFO1 FROM INVENTORY_MST2  WHERE PART = '{0}' AND Location = '{1}'",V.Local.sPart,V.Local.sLoc,V.Local.sSQL)
+F.ODBC.Connection!con.OpenLocalRecordsetRO("rstQty",V.Local.sSQL)
+
+F.Intrinsic.Control.If(V.ODBC.con!rstQty.EOF,<>,True)
+	'Update Customer Qty with the correct value, 000044 is the customer qty
+	F.Intrinsic.Math.Sub(V.Passed.000044,V.ODBC.con!rstQty.FieldValFloat!TEXT_INFO1,V.Passed.000044)
+F.Intrinsic.Control.EndIf
+
+F.Intrinsic.Control.ExitSub
+
+F.Intrinsic.Control.Label("UpdateSingCustomerQty_Err")
+F.Intrinsic.Control.If(V.Ambient.ErrorNumber,<>,0)
+	Function.Intrinsic.String.Concat("Project: GCG_3645_Add_Setup_Qty_To_WO.gas",V.Ambient.Newline,V.Ambient.Newline,"Subroutine: ",V.Ambient.CurrentSubroutine,V.Ambient.NewLine,"Error Occurred ",V.Ambient.ErrorNumber," with description ",V.Ambient.ErrorDescription,V.Local.sError)
+	F.Intrinsic.UI.Msgbox(V.Local.sError)
+	F.Intrinsic.Control.CallSub(Unload)
+Function.Intrinsic.Control.EndIf
+
+Program.Sub.UpdateSingCustomerQty.End
+
+Program.Sub.Comments.Start
+${$0$}$$}$$}$12:00:00 AM$}$False
+Program.Sub.Comments.End
